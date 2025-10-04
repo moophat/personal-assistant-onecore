@@ -1,0 +1,8 @@
+# Textual TUI configuration overrides (future)
+#
+# This file is reserved for future Textual-based TUI adapter settings
+# such as:
+# - UI theme and color schemes
+# - Widget layout preferences
+# - Keybinding customizations
+# - TUI-specific logging levels

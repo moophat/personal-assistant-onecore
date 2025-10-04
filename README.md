@@ -20,6 +20,32 @@ A command-line interface for interacting with Large Language Models via OpenRout
 - **JSON-formatted API Logs**: Detailed request/response logging
 - **Runtime Log Level Control**: Adjust logging per category without restart
 
+## Project Structure
+
+```
+personal-assistant-onecore/
+├── main.py                 # Launcher - routes to adapters
+├── core/                   # Core business logic (shared)
+│   ├── config_loader.py    # Hot-reload config management
+│   ├── prompt_builder.py   # Jinja2 template rendering
+│   ├── memory.py           # Session memory management
+│   ├── llm_service.py      # LLM API interaction
+│   └── logger.py           # Logging utilities
+├── adapters/               # UI-specific adapters
+│   └── cli_ptk.py          # CLI REPL (prompt_toolkit)
+├── config/                 # Configuration files
+│   ├── config.yaml         # Base config (shared)
+│   ├── cli_ptk.yaml        # CLI overrides (future)
+│   └── tui_textual.yaml    # TUI overrides (future)
+├── templates/              # Jinja2 prompt templates
+│   ├── prompt.jinja        # System prompt template
+│   └── user_prompt.jinja   # User message template
+└── logs/                   # Application logs
+
+```
+
+**Architecture**: "One Core, Many Mouths" - single business logic core with multiple UI adapters.
+
 ## Prerequisites
 
 - Python 3.11 or higher
@@ -71,6 +97,15 @@ system_prompt: "You are a helpful AI assistant. Be concise and accurate."
 
 All parameters from `config.yaml` are passed to the OpenRouter API, so any OpenRouter-compatible parameters can be added.
 
+### Config Layering (Future)
+
+The project supports adapter-specific configuration overrides:
+- `config/config.yaml` - Base configuration (shared across all adapters)
+- `config/cli_ptk.yaml` - CLI-specific overrides (placeholder for future use)
+- `config/tui_textual.yaml` - Textual TUI overrides (placeholder for future use)
+
+This layering pattern allows different UI adapters to customize settings without modifying the base configuration.
+
 ### templates/prompt.jinja
 
 Customize the system prompt template with Jinja2:
@@ -92,7 +127,11 @@ OPENROUTER_API_KEY=sk-or-v1-...
 ### Start the REPL
 
 ```bash
-python src/main.py
+# Default (CLI adapter)
+python main.py
+
+# Explicit adapter selection
+python main.py cli
 ```
 
 ### Chat with the Model

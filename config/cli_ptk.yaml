@@ -1,0 +1,8 @@
+# CLI-specific configuration overrides
+#
+# This file is currently unused but reserved for future CLI-specific settings
+# such as:
+# - Custom log levels for CLI
+# - CLI-specific prompt templates
+# - Terminal color schemes
+# - REPL history settings

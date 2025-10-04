@@ -11,32 +11,35 @@ import logging
 import json
 from pathlib import Path
 
-from dotenv import load_dotenv
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
 import langchain
 
 # Import from core
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.config_loader import ConfigLoader
 from core.prompt_builder import PromptBuilder
 from core.memory import SessionMemory
 from core.llm_service import LLMService
-from utils.logger import init_logger
+from core.logger import init_logger
 
 
 class REPLCLI:
     """Main REPL CLI application."""
 
-    def __init__(self):
-        # Load environment variables
-        load_dotenv()
+    def __init__(self, config_loader, prompt_builder, api_key):
+        """
+        Initialize CLI REPL.
 
+        Args:
+            config_loader: ConfigLoader instance (for hot-reload)
+            prompt_builder: PromptBuilder instance (for hot-reload)
+            api_key: OpenRouter API key
+        """
         # Enable OpenAI SDK debug logging (shows raw HTTP requests/responses)
         os.environ["OPENAI_LOG"] = "debug"
 
         # Initialize root logger (base level for all loggers)
-        base_dir = Path(__file__).parent.parent.parent
+        base_dir = Path(__file__).parent.parent
         log_file = base_dir / "logs" / "cli.log"
         init_logger(
             log_level=logging.DEBUG,  # Root at DEBUG to allow all categories
@@ -70,16 +73,10 @@ class REPLCLI:
         # Use prompt logger as main logger
         self.logger = self.prompt_logger
 
-        # Check for API key
-        self.api_key = os.getenv("OPENROUTER_API_KEY")
-        if not self.api_key:
-            self.logger.error("OPENROUTER_API_KEY environment variable not set")
-            print("Error: OPENROUTER_API_KEY environment variable not set")
-            sys.exit(1)
+        # Store API key
+        self.api_key = api_key
 
-        # Initialize components
-        config_loader = ConfigLoader(base_dir / "config" / "config.yaml")
-        prompt_builder = PromptBuilder(base_dir / "templates" / "prompt.jinja")
+        # Initialize session memory (adapter-specific)
         session_memory = SessionMemory()
 
         # Initialize LLM service
@@ -279,11 +276,14 @@ class REPLCLI:
                 sys.exit(0)
 
 
-def main():
-    """Entry point."""
-    cli = REPLCLI()
+def run_repl(config_loader, prompt_builder, api_key):
+    """
+    Run the CLI REPL interface.
+
+    Args:
+        config_loader: ConfigLoader instance (for hot-reload)
+        prompt_builder: PromptBuilder instance (for hot-reload)
+        api_key: OpenRouter API key
+    """
+    cli = REPLCLI(config_loader, prompt_builder, api_key)
     cli.run()
-
-
-if __name__ == "__main__":
-    main()
