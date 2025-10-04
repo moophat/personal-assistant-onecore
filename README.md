@@ -327,13 +327,6 @@ All parameters from `config.yaml` are passed to OpenRouter API:
 
 The implementation is **complete and functional** according to initial requirements, with significant enhancements made for developer experience (logging, debugging, runtime control). The codebase is clean, modular, and well-structured for future enhancement.
 
-## API Key Storage
-
-OpenRouter API key stored in `api_key.txt` (already in `.gitignore`):
-```
-REDACTED_API_KEY
-```
-
 ## License
 
 MIT
