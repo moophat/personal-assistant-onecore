@@ -1,0 +1,14 @@
+# OpenRouter LLM Configuration
+
+# Model to use (see https://openrouter.ai/models for available models)
+model: google/gemini-2.5-flash-lite-preview-09-2025
+
+# Sampling temperature (0.0 - 2.0)
+# Lower values = more focused/deterministic, higher = more creative/random
+temperature: 0.7
+
+# Maximum tokens in response
+max_tokens: 2000
+
+# System prompt (can also be a template variable)
+system_prompt: "You are a helpful AI assistant. Be concise and accurate."
