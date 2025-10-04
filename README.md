@@ -1,6 +1,6 @@
-# CLI LLM PoC
+# Personal Assistant - One Core
 
-A command-line interface for interacting with Large Language Models via OpenRouter API. Features hot-reload configuration, multi-turn conversation memory, and comprehensive debugging tools.
+Multi-interface LLM assistant with "One Core, Many Mouths" architecture. Features hot-reload configuration, multi-turn conversation memory, and comprehensive debugging tools. Currently supports CLI adapter with plans for TUI and other interfaces.
 
 ## Features
 
@@ -55,7 +55,7 @@ personal-assistant-onecore/
 
 1. **Clone or navigate to the project directory:**
    ```bash
-   cd poc-cli-llm
+   cd personal-assistant-onecore
    ```
 
 2. **Create and activate virtual environment:**
@@ -209,33 +209,6 @@ $ vim config/config.yaml
 
 Press `Ctrl-C` or `Ctrl-D` to exit.
 
-## Project Structure
-
-```
-poc-cli-llm/
-├── config/
-│   └── config.yaml              # Model configuration
-├── templates/
-│   └── prompt.jinja             # Jinja2 templates
-├── src/
-│   ├── main.py                  # Entry point
-│   ├── core/
-│   │   ├── config_loader.py     # Config loading + hot reload
-│   │   ├── prompt_builder.py    # Jinja2 rendering
-│   │   ├── memory.py            # Session memory
-│   │   └── llm_service.py       # API client + business logic
-│   ├── interfaces/
-│   │   └── cli.py               # REPL with commands
-│   └── utils/
-│       └── logger.py            # Logging system
-├── logs/
-│   └── cli.log                  # Application logs (auto-created)
-├── requirements.txt
-├── .env.example
-├── .env
-└── README.md
-```
-
 ## Technical Implementation
 
 ### Message Flow
@@ -294,8 +267,8 @@ Loop
 
 - In-memory storage per session_id
 - Messages stored as LangChain `BaseMessage` objects
-- Currently hardcoded to `session_id="default"`
-- No persistence across restarts (PoC scope)
+- Currently hardcoded to `session_id="default"` (adapter-managed)
+- No persistence across restarts (future enhancement)
 
 ### Hot Reload Implementation
 
@@ -336,15 +309,15 @@ The application handles:
 - Bad model slugs or API errors
 - Malformed API responses
 
-## Known Scope Limitations
+## Current Limitations & Future Enhancements
 
-As this is a proof-of-concept, the following were explicitly NOT included:
-- No streaming (basic request/response)
-- No fancy output formatting
-- No Docker/deployment config
-- No tests (PoC scope)
-- No conversation persistence across restarts
-- Single session per run (session_id="default")
+The following features are planned but not yet implemented:
+- Streaming responses (basic request/response only)
+- Rich text formatting and output styling
+- Docker/deployment configuration
+- Automated test suite
+- Conversation persistence across restarts
+- Multi-session support (currently single default session per adapter)
 
 ## Development Notes
 
@@ -364,7 +337,7 @@ All parameters from `config.yaml` are passed to OpenRouter API:
 
 ## Current State
 
-The implementation is **complete and functional** according to initial requirements, with significant enhancements made for developer experience (logging, debugging, runtime control). The codebase is clean, modular, and well-structured for future enhancement.
+The project has evolved from a CLI PoC to a **"One Core, Many Mouths"** architecture, ready for multi-interface expansion. The core business logic is interface-agnostic, with the CLI adapter serving as the reference implementation. The codebase is clean, modular, and well-structured for adding new UI adapters (TUI, HTTP API, etc.) without touching core logic.
 
 ## License
 
