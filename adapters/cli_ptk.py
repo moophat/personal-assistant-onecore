@@ -15,6 +15,16 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
 import langchain
 
+# Rich imports for beautiful CLI formatting
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.markdown import Markdown
+from rich.text import Text
+from rich.status import Status
+from rich.columns import Columns
+from rich import box
+
 # Import from core
 from core.config_loader import ConfigLoader
 from core.prompt_builder import PromptBuilder
@@ -35,6 +45,9 @@ class REPLCLI:
             prompt_builder: PromptBuilder instance (for hot-reload)
             api_key: OpenRouter API key
         """
+        # Initialize Rich console for beautiful output
+        self.console = Console()
+        
         # Enable OpenAI SDK debug logging (shows raw HTTP requests/responses)
         os.environ["OPENAI_LOG"] = "debug"
 
@@ -113,27 +126,51 @@ class REPLCLI:
         cmd = command.strip().lower()
 
         if cmd == "/history":
-            # Dump full conversation history
+            # Dump full conversation history with Rich formatting
             history = self.llm_service.get_history(self.session_id)
             if not history:
-                self.logger.info("No conversation history yet")
+                self.console.print(Panel("No conversation history yet", title="📜 History", border_style="yellow"))
                 return
 
-            self.logger.info("=== Conversation History ===")
+            # Create a table for conversation history
+            table = Table(title="📜 Conversation History", box=box.ROUNDED)
+            table.add_column("#", style="dim", width=4)
+            table.add_column("Type", style="bold", width=10)
+            table.add_column("Content", style="white")
+
             for i, msg in enumerate(history, 1):
-                self.logger.info(f"[{i}] {msg['type']}: {msg['content']}")
-            self.logger.info(f"=== Total messages: {len(history)} ===")
+                msg_type = msg['type']
+                content = msg['content']
+                
+                # Truncate long content for table display
+                if len(content) > 100:
+                    content = content[:97] + "..."
+                
+                # Style based on message type
+                if msg_type == "human":
+                    type_style = "[bold blue]👤 Human[/bold blue]"
+                elif msg_type == "ai":
+                    type_style = "[bold green]🤖 AI[/bold green]"
+                else:
+                    type_style = f"[dim]{msg_type}[/dim]"
+                
+                table.add_row(str(i), type_style, content)
+
+            self.console.print(table)
+            self.console.print(f"[dim]Total messages: {len(history)}[/dim]")
 
         elif cmd == "/clear":
             # Clear conversation history
             self.llm_service.clear_history(self.session_id)
-            self.logger.info("Conversation history cleared")
+            self.console.print(Panel("🗑️  Conversation history cleared", border_style="green"))
 
         elif cmd == "/fullhistorylog":
             # Toggle full history logging mode
             self.log_full_history = not self.log_full_history
             status = "enabled" if self.log_full_history else "disabled"
-            self.logger.info(f"Full history logging {status}")
+            icon = "✅" if self.log_full_history else "❌"
+            style = "green" if self.log_full_history else "red"
+            self.console.print(Panel(f"{icon} Full history logging {status}", border_style=style))
 
         elif cmd == "/debug":
             # Toggle LangChain debug mode (shows internal processing)
@@ -145,11 +182,16 @@ class REPLCLI:
             langchain.verbose = self.langchain_debug
 
             status = "enabled" if self.langchain_debug else "disabled"
-            self.logger.info(f"LangChain debug mode {status}")
+            icon = "🔍" if self.langchain_debug else "🔇"
+            style = "cyan" if self.langchain_debug else "dim"
+            
+            panel_content = f"{icon} LangChain debug mode {status}"
             if self.langchain_debug:
-                self.logger.info("Will show LangChain internal processing")
+                panel_content += "\n[dim]Will show LangChain internal processing[/dim]"
             else:
-                self.logger.info("HTTP request logging still active (set at startup)")
+                panel_content += "\n[dim]HTTP request logging still active (set at startup)[/dim]"
+            
+            self.console.print(Panel(panel_content, title="Debug Mode", border_style=style))
 
         elif cmd.startswith("/loglevel"):
             # Change log level: /loglevel prompt INFO or /loglevel http DEBUG
@@ -157,21 +199,33 @@ class REPLCLI:
 
             # Show current status
             if len(parts) == 1 or (len(parts) == 2 and parts[1].lower() == "status"):
-                print("\n=== Current Log Levels ===")
-                print(f"ROOT:      {logging.getLevelName(logging.getLogger().level)} (fixed at DEBUG)")
-                print(f"prompt:    {logging.getLevelName(self.prompt_logger.level)}")
-                print(f"http:      {logging.getLevelName(logging.getLogger('openai').level)}")
-                print(f"langchain: {logging.getLevelName(self.langchain_logger.level)}")
-                print("=========================\n")
-                print("Note: ROOT is fixed at DEBUG to allow category-level control")
+                # Create a table for log levels
+                table = Table(title="📊 Current Log Levels", box=box.ROUNDED)
+                table.add_column("Category", style="bold cyan", width=12)
+                table.add_column("Level", style="bold", width=10)
+                table.add_column("Notes", style="dim")
+
+                table.add_row("ROOT", logging.getLevelName(logging.getLogger().level), "fixed at DEBUG")
+                table.add_row("prompt", logging.getLevelName(self.prompt_logger.level), "application logs")
+                table.add_row("http", logging.getLevelName(logging.getLogger('openai').level), "HTTP requests")
+                table.add_row("langchain", logging.getLevelName(self.langchain_logger.level), "LangChain internals")
+
+                self.console.print(table)
+                self.console.print("[dim]Note: ROOT is fixed at DEBUG to allow category-level control[/dim]")
                 return
 
             if len(parts) < 2 or len(parts) > 3:
-                print("Usage: /loglevel [category] [level]")
-                print("       /loglevel status  (show current levels)")
-                print("Categories: prompt, http, langchain, all")
-                print("Levels: DEBUG, INFO, WARNING, ERROR")
-                print("Example: /loglevel http DEBUG")
+                usage_panel = Panel(
+                    "[bold]Usage:[/bold]\n"
+                    "  /loglevel [category] [level]\n"
+                    "  /loglevel status  (show current levels)\n\n"
+                    "[bold]Categories:[/bold] prompt, http, langchain, all\n"
+                    "[bold]Levels:[/bold] DEBUG, INFO, WARNING, ERROR\n\n"
+                    "[bold]Example:[/bold] /loglevel http DEBUG",
+                    title="📋 Log Level Command",
+                    border_style="yellow"
+                )
+                self.console.print(usage_panel)
                 return
 
             # Parse arguments
@@ -190,7 +244,8 @@ class REPLCLI:
             }
 
             if level_name not in level_map:
-                self.logger.info(f"Invalid level: {level_name}. Use DEBUG, INFO, WARNING, or ERROR")
+                self.console.print(Panel(f"❌ Invalid level: {level_name}\nUse: DEBUG, INFO, WARNING, or ERROR", 
+                                       title="Error", border_style="red"))
                 return
 
             level = level_map[level_name]
@@ -198,37 +253,60 @@ class REPLCLI:
             # Set log level for specified category
             if category == "prompt":
                 self.prompt_logger.setLevel(level)
-                print(f"[Loglevel] Prompt logs set to {level_name}")
+                self.console.print(Panel(f"✅ Prompt logs set to {level_name}", border_style="green"))
             elif category == "http":
                 logging.getLogger("openai").setLevel(level)
                 logging.getLogger("httpx").setLevel(level)
                 logging.getLogger("httpcore").setLevel(level)
-                print(f"[Loglevel] HTTP logs set to {level_name}")
+                self.console.print(Panel(f"✅ HTTP logs set to {level_name}", border_style="green"))
             elif category == "langchain":
                 self.langchain_logger.setLevel(level)
-                print(f"[Loglevel] LangChain logs set to {level_name}")
+                self.console.print(Panel(f"✅ LangChain logs set to {level_name}", border_style="green"))
             elif category == "all":
                 self.prompt_logger.setLevel(level)
                 logging.getLogger("openai").setLevel(level)
                 logging.getLogger("httpx").setLevel(level)
                 logging.getLogger("httpcore").setLevel(level)
                 self.langchain_logger.setLevel(level)
-                print(f"[Loglevel] All categories set to {level_name}")
+                self.console.print(Panel(f"✅ All categories set to {level_name}", border_style="green"))
             else:
-                print(f"[Loglevel] Unknown category: {category}. Use prompt, http, langchain, or all")
+                self.console.print(Panel(f"❌ Unknown category: {category}\nUse: prompt, http, langchain, or all", 
+                                       title="Error", border_style="red"))
 
         else:
-            self.logger.info(f"Unknown command: {command}. Available: /history, /clear, /fullhistorylog, /debug, /loglevel")
+            available_commands = "/history, /clear, /fullhistorylog, /debug, /loglevel"
+            self.console.print(Panel(f"❓ Unknown command: {command}\n\n[bold]Available commands:[/bold]\n{available_commands}", 
+                                   title="Command Help", border_style="yellow"))
 
     def run(self) -> None:
         """Run the REPL loop."""
-        print("CLI LLM PoC - Type your messages (Ctrl-C to exit)")
-        print("=" * 50)
+        # Beautiful startup welcome
+        welcome_panel = Panel(
+            "[bold blue]🤖 Personal Assistant - One Core[/bold blue]\n\n"
+            "[dim]Type your messages to chat with the AI\n"
+            "Use slash commands for special functions\n"
+            "Press Ctrl-C to exit[/dim]",
+            title="Welcome",
+            border_style="blue",
+            padding=(1, 2)
+        )
+        self.console.print(welcome_panel)
 
-        # Log config on startup
+        # Display startup config in a beautiful table
         config = self.llm_service.config_loader.get_config()
-        config_str = json.dumps(config, indent=2)
-        self.logger.info(f"Startup config:\n{config_str}")
+        
+        config_table = Table(title="🔧 Configuration", box=box.ROUNDED)
+        config_table.add_column("Setting", style="bold cyan", width=20)
+        config_table.add_column("Value", style="white")
+        
+        for key, value in config.items():
+            if isinstance(value, dict):
+                value_str = json.dumps(value, indent=2)
+            else:
+                value_str = str(value)
+            config_table.add_row(key, value_str)
+        
+        self.console.print(config_table)
 
         while True:
             try:
@@ -241,7 +319,9 @@ class REPLCLI:
                         reloaded_items.append("config")
                     if template_reloaded:
                         reloaded_items.append("template")
-                    print(f"[Config reloaded: {', '.join(reloaded_items)}]")
+                    
+                    reload_text = f"🔄 Reloaded: {', '.join(reloaded_items)}"
+                    self.console.print(Panel(reload_text, border_style="green"))
 
                 # Get user input
                 user_input = self.prompt_session.prompt("> ")
@@ -256,23 +336,47 @@ class REPLCLI:
 
                 # Send message and get response
                 try:
-                    response = self.llm_service.send_message(
-                        user_input=user_input,
-                        session_id=self.session_id,
-                        log_full_history=self.log_full_history
-                    )
+                    # Show thinking indicator
+                    with self.console.status("[bold green]🤔 Thinking...", spinner="dots"):
+                        response = self.llm_service.send_message(
+                            user_input=user_input,
+                            session_id=self.session_id,
+                            log_full_history=self.log_full_history
+                        )
 
-                    print(f"\n{response}\n")
+                    # Display AI response in a beautiful panel with markdown
+                    response_panel = Panel(
+                        Markdown(response),
+                        title="🤖 AI Response",
+                        border_style="green",
+                        padding=(1, 2)
+                    )
+                    self.console.print(response_panel)
 
                 except Exception as e:
                     self.logger.error(f"Error calling API: {e}")
-                    print(f"Error calling API: {e}\n")
+                    error_panel = Panel(
+                        f"❌ Error calling API: {e}",
+                        title="Error",
+                        border_style="red"
+                    )
+                    self.console.print(error_panel)
 
             except KeyboardInterrupt:
-                print("\n\nGoodbye!")
+                goodbye_panel = Panel(
+                    "👋 Thanks for using Personal Assistant!\nGoodbye!",
+                    title="Farewell",
+                    border_style="blue"
+                )
+                self.console.print(goodbye_panel)
                 sys.exit(0)
             except EOFError:
-                print("\n\nGoodbye!")
+                goodbye_panel = Panel(
+                    "👋 Thanks for using Personal Assistant!\nGoodbye!",
+                    title="Farewell",
+                    border_style="blue"
+                )
+                self.console.print(goodbye_panel)
                 sys.exit(0)
 
 
