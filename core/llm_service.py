@@ -17,6 +17,12 @@ from typing import List, Dict, Any, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
 
+# Rich imports for enhanced logging
+from rich.console import Console
+from rich.tree import Tree
+from rich.panel import Panel
+from rich.syntax import Syntax
+
 
 class OpenRouterClient:
     """Client for OpenRouter API using LangChain's ChatOpenAI."""
@@ -90,6 +96,8 @@ class LLMService:
         self.client = OpenRouterClient(api_key)
         # Use app.prompt logger category for prompt/config logging
         self.logger = logger or logging.getLogger("app.prompt")
+        # Rich console for enhanced logging
+        self.console = Console()
 
     def check_hot_reload(self) -> tuple[bool, bool]:
         """
@@ -122,21 +130,65 @@ class LLMService:
         config = self.config_loader.get_config()
         messages = []
 
-        # Add system prompt if configured
-        system_prompt = config.get("system_prompt", "")
-        if system_prompt:
-            rendered_system = self.prompt_builder.render(
-                user_input=user_input,
-                config=config
-            )
-            messages.append(SystemMessage(content=rendered_system))
+        # Rich logging for message building process
+        if self.logger.isEnabledFor(logging.DEBUG):
+            build_tree = Tree("🏗️ [bold blue]MESSAGE BUILDING[/bold blue]")
+            
+            # Add system prompt if configured
+            system_prompt = config.get("system_prompt", "")
+            if system_prompt:
+                rendered_system = self.prompt_builder.render(
+                    user_input=user_input,
+                    config=config
+                )
+                messages.append(SystemMessage(content=rendered_system))
+                
+                system_node = build_tree.add("🔧 [yellow]System Prompt[/yellow]")
+                system_node.add(f"[dim]Template:[/dim] {repr(system_prompt[:100])}{'...' if len(system_prompt) > 100 else ''}")
+                system_node.add(f"[dim]Rendered length:[/dim] {len(rendered_system)} chars")
+            else:
+                build_tree.add("❌ [dim]No system prompt configured[/dim]")
 
-        # Add conversation history (LangChain messages are already in correct format)
-        history = self.session_memory.get_session(session_id)
-        messages.extend(history.messages_list)
+            # Add conversation history
+            history = self.session_memory.get_session(session_id)
+            if history.messages_list:
+                messages.extend(history.messages_list)
+                history_node = build_tree.add(f"📚 [cyan]History[/cyan] ({len(history.messages_list)} messages)")
+                for i, msg in enumerate(history.messages_list[-3:], 1):  # Show last 3 messages
+                    msg_type = "👤 Human" if isinstance(msg, HumanMessage) else "🤖 AI"
+                    content_preview = msg.content[:50] + "..." if len(msg.content) > 50 else msg.content
+                    history_node.add(f"[dim]{msg_type}:[/dim] {content_preview}")
+                if len(history.messages_list) > 3:
+                    history_node.add(f"[dim]... and {len(history.messages_list) - 3} more messages[/dim]")
+            else:
+                build_tree.add("📭 [dim]No conversation history[/dim]")
 
-        # Add current user input
-        messages.append(HumanMessage(content=user_input))
+            # Add current user input
+            messages.append(HumanMessage(content=user_input))
+            user_node = build_tree.add("💬 [green]Current Input[/green]")
+            user_node.add(f"[dim]Content:[/dim] {repr(user_input)}")
+            user_node.add(f"[dim]Length:[/dim] {len(user_input)} chars")
+            
+            # Summary
+            build_tree.add(f"📊 [bold]Total messages:[/bold] {len(messages)}")
+            
+            self.console.print(build_tree)
+        else:
+            # Non-debug path - same logic without Rich logging
+            system_prompt = config.get("system_prompt", "")
+            if system_prompt:
+                rendered_system = self.prompt_builder.render(
+                    user_input=user_input,
+                    config=config
+                )
+                messages.append(SystemMessage(content=rendered_system))
+
+            # Add conversation history
+            history = self.session_memory.get_session(session_id)
+            messages.extend(history.messages_list)
+
+            # Add current user input
+            messages.append(HumanMessage(content=user_input))
 
         return messages
 

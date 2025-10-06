@@ -23,6 +23,9 @@ from rich.markdown import Markdown
 from rich.text import Text
 from rich.status import Status
 from rich.columns import Columns
+from rich.syntax import Syntax
+from rich.tree import Tree
+from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich import box
 
 # Import from core
@@ -92,9 +95,83 @@ class REPLCLI:
             print(f"Error loading initial configuration: {e}")
             sys.exit(1)
 
+    def process_user_input(self, user_input: str) -> dict:
+        """
+        Process and validate user input with Rich logging.
+        
+        Args:
+            user_input: Raw user input string
+            
+        Returns:
+            dict: Processing results with metadata
+        """
+        processing_info = {
+            "original": user_input,
+            "processed": user_input.strip(),
+            "type": "unknown",
+            "valid": True,
+            "metadata": {}
+        }
+        
+        # Log input processing with Rich formatting
+        if self.logger.isEnabledFor(logging.DEBUG):
+            input_tree = Tree("🔍 [bold cyan]INPUT PROCESSING[/bold cyan]")
+            
+            # Add original input
+            input_tree.add(f"[dim]Original:[/dim] {repr(user_input)}")
+            
+            # Add processed input
+            processed = user_input.strip()
+            input_tree.add(f"[dim]Processed:[/dim] {repr(processed)}")
+            
+            # Determine input type
+            if processed.startswith("/"):
+                input_type = "command"
+                processing_info["type"] = "command"
+                input_tree.add("[yellow]📋 Type: Command[/yellow]")
+            elif not processed:
+                input_type = "empty"
+                processing_info["type"] = "empty"
+                processing_info["valid"] = False
+                input_tree.add("[red]❌ Type: Empty (invalid)[/red]")
+            else:
+                input_type = "message"
+                processing_info["type"] = "message"
+                input_tree.add("[green]💬 Type: Message[/green]")
+            
+            # Add length info
+            input_tree.add(f"[dim]Length:[/dim] {len(processed)} characters")
+            
+            # Add validation status
+            if processing_info["valid"]:
+                input_tree.add("[green]✅ Status: Valid[/green]")
+            else:
+                input_tree.add("[red]❌ Status: Invalid[/red]")
+            
+            # Display the tree
+            self.console.print(input_tree)
+        
+        processing_info["processed"] = processed
+        return processing_info
+
     def handle_command(self, command: str) -> None:
-        """Handle slash commands."""
+        """Handle slash commands with Rich logging."""
         cmd = command.strip().lower()
+        
+        # Log command processing with Rich formatting
+        if self.logger.isEnabledFor(logging.DEBUG):
+            cmd_tree = Tree("⚡ [bold yellow]COMMAND PROCESSING[/bold yellow]")
+            cmd_tree.add(f"[dim]Raw command:[/dim] {repr(command)}")
+            cmd_tree.add(f"[dim]Normalized:[/dim] {repr(cmd)}")
+            
+            # Determine command validity
+            valid_commands = ["/history", "/clear", "/fullhistorylog", "/debug", "/loglevel"]
+            if any(cmd.startswith(valid_cmd) for valid_cmd in valid_commands):
+                cmd_tree.add("[green]✅ Status: Valid command[/green]")
+            else:
+                cmd_tree.add("[red]❌ Status: Unknown command[/red]")
+            
+            self.console.print(cmd_tree)
 
         if cmd == "/history":
             # Dump full conversation history with Rich formatting
@@ -306,20 +383,31 @@ class REPLCLI:
                 # Get user input
                 user_input = self.prompt_session.prompt("> ")
 
-                if not user_input.strip():
+                # Process user input with Rich logging
+                input_info = self.process_user_input(user_input)
+                
+                if not input_info["valid"]:
                     continue
 
                 # Handle commands
-                if user_input.startswith("/"):
-                    self.handle_command(user_input)
+                if input_info["type"] == "command":
+                    self.handle_command(input_info["processed"])
                     continue
 
                 # Send message and get response
                 try:
+                    # Log message processing with Rich formatting
+                    if self.logger.isEnabledFor(logging.DEBUG):
+                        msg_tree = Tree("📤 [bold green]MESSAGE PROCESSING[/bold green]")
+                        msg_tree.add(f"[dim]Input:[/dim] {repr(input_info['processed'])}")
+                        msg_tree.add(f"[dim]Session ID:[/dim] {self.session_id}")
+                        msg_tree.add(f"[dim]Full history logging:[/dim] {'✅ Enabled' if self.log_full_history else '❌ Disabled'}")
+                        self.console.print(msg_tree)
+                    
                     # Show thinking indicator
                     with self.console.status("[bold green]🤔 Thinking...", spinner="dots"):
                         response = self.llm_service.send_message(
-                            user_input=user_input,
+                            user_input=input_info["processed"],
                             session_id=self.session_id,
                             log_full_history=self.log_full_history
                         )
