@@ -30,13 +30,12 @@ from core.config_loader import ConfigLoader
 from core.prompt_builder import PromptBuilder
 from core.memory import SessionMemory
 from core.llm_service import LLMService
-from core.logger import init_logger
 
 
 class REPLCLI:
     """Main REPL CLI application."""
 
-    def __init__(self, config_loader, prompt_builder, api_key):
+    def __init__(self, config_loader, prompt_builder, api_key, log_manager):
         """
         Initialize CLI REPL.
 
@@ -44,47 +43,19 @@ class REPLCLI:
             config_loader: ConfigLoader instance (for hot-reload)
             prompt_builder: PromptBuilder instance (for hot-reload)
             api_key: OpenRouter API key
+            log_manager: LogManager instance (from core)
         """
         # Initialize Rich console for beautiful output
         self.console = Console()
-        
+
         # Enable OpenAI SDK debug logging (shows raw HTTP requests/responses)
         os.environ["OPENAI_LOG"] = "debug"
 
-        # Initialize root logger (base level for all loggers)
-        base_dir = Path(__file__).parent.parent
-        log_file = base_dir / "logs" / "cli.log"
-        init_logger(
-            log_level=logging.DEBUG,  # Root at DEBUG to allow all categories
-            log_file=str(log_file),
-            shell_output=True,
-            print_log_init=True,
-        )
-
-        # Create separate logger categories with individual control
-        # Category: prompt - our application logs (config, prompts, etc)
-        self.prompt_logger = logging.getLogger("app.prompt")
-        self.prompt_logger.setLevel(logging.INFO)  # Default: show prompts
-
-        # Category: http - HTTP request/response logs from OpenAI/httpx
-        self.http_logger = logging.getLogger("http")
-        openai_logger = logging.getLogger("openai")
-        openai_logger.setLevel(logging.WARNING)  # Default: hide HTTP logs
-        httpx_logger = logging.getLogger("httpx")
-        httpx_logger.setLevel(logging.WARNING)
-        httpcore_logger = logging.getLogger("httpcore")
-        httpcore_logger.setLevel(logging.WARNING)
-
-        # Category: langchain - LangChain internal processing
-        self.langchain_logger = logging.getLogger("langchain")
-        self.langchain_logger.setLevel(logging.WARNING)  # Default: hide
-
-        # Silence noisy libraries
-        logging.getLogger("asyncio").setLevel(logging.WARNING)
-        logging.getLogger("urllib3").setLevel(logging.WARNING)
+        # Store log manager (initialized in launcher)
+        self.log_manager = log_manager
 
         # Use prompt logger as main logger
-        self.logger = self.prompt_logger
+        self.logger = logging.getLogger("app.prompt")
 
         # Store API key
         self.api_key = api_key
@@ -199,27 +170,51 @@ class REPLCLI:
 
             # Show current status
             if len(parts) == 1 or (len(parts) == 2 and parts[1].lower() == "status"):
+                # Get status from LogManager
+                status = self.log_manager.get_status()
+
                 # Create a table for log levels
                 table = Table(title="📊 Current Log Levels", box=box.ROUNDED)
                 table.add_column("Category", style="bold cyan", width=12)
                 table.add_column("Level", style="bold", width=10)
-                table.add_column("Notes", style="dim")
+                table.add_column("Description", style="dim")
 
-                table.add_row("ROOT", logging.getLevelName(logging.getLogger().level), "fixed at DEBUG")
-                table.add_row("prompt", logging.getLevelName(self.prompt_logger.level), "application logs")
-                table.add_row("http", logging.getLevelName(logging.getLogger('openai').level), "HTTP requests")
-                table.add_row("langchain", logging.getLevelName(self.langchain_logger.level), "LangChain internals")
+                # Add root logger
+                table.add_row("ROOT", status["root"], "auto-adjusts to lowest component")
+
+                # Add component loggers
+                components = self.log_manager.get_ui_components()
+                for component, info in components.items():
+                    current_level = status["components"].get(component, "N/A")
+                    table.add_row(component, current_level, info["description"])
 
                 self.console.print(table)
-                self.console.print("[dim]Note: ROOT is fixed at DEBUG to allow category-level control[/dim]")
+                self.console.print("[dim]Tip: Use '/loglevel --all' to see all active loggers[/dim]")
+                return
+
+            # Show all loggers (advanced mode)
+            if len(parts) == 2 and parts[1] == "--all":
+                all_loggers = self.log_manager.get_all_loggers()
+                self.console.print(Panel(
+                    f"[bold]All Active Loggers ({len(all_loggers)}):[/bold]\n\n" +
+                    "\n".join(f"  • {logger}" for logger in all_loggers[:50]) +
+                    (f"\n  ... and {len(all_loggers) - 50} more" if len(all_loggers) > 50 else ""),
+                    title="🔍 Advanced Debug",
+                    border_style="cyan"
+                ))
                 return
 
             if len(parts) < 2 or len(parts) > 3:
+                # Build usage with dynamic component list
+                components = self.log_manager.get_ui_components()
+                component_list = ", ".join(components.keys()) + ", all"
+
                 usage_panel = Panel(
                     "[bold]Usage:[/bold]\n"
                     "  /loglevel [category] [level]\n"
-                    "  /loglevel status  (show current levels)\n\n"
-                    "[bold]Categories:[/bold] prompt, http, langchain, all\n"
+                    "  /loglevel status  (show current levels)\n"
+                    "  /loglevel --all   (show all active loggers)\n\n"
+                    f"[bold]Categories:[/bold] {component_list}\n"
                     "[bold]Levels:[/bold] DEBUG, INFO, WARNING, ERROR\n\n"
                     "[bold]Example:[/bold] /loglevel http DEBUG",
                     title="📋 Log Level Command",
@@ -244,34 +239,19 @@ class REPLCLI:
             }
 
             if level_name not in level_map:
-                self.console.print(Panel(f"❌ Invalid level: {level_name}\nUse: DEBUG, INFO, WARNING, or ERROR", 
+                self.console.print(Panel(f"❌ Invalid level: {level_name}\nUse: DEBUG, INFO, WARNING, or ERROR",
                                        title="Error", border_style="red"))
                 return
 
             level = level_map[level_name]
 
-            # Set log level for specified category
-            if category == "prompt":
-                self.prompt_logger.setLevel(level)
-                self.console.print(Panel(f"✅ Prompt logs set to {level_name}", border_style="green"))
-            elif category == "http":
-                logging.getLogger("openai").setLevel(level)
-                logging.getLogger("httpx").setLevel(level)
-                logging.getLogger("httpcore").setLevel(level)
-                self.console.print(Panel(f"✅ HTTP logs set to {level_name}", border_style="green"))
-            elif category == "langchain":
-                self.langchain_logger.setLevel(level)
-                self.console.print(Panel(f"✅ LangChain logs set to {level_name}", border_style="green"))
-            elif category == "all":
-                self.prompt_logger.setLevel(level)
-                logging.getLogger("openai").setLevel(level)
-                logging.getLogger("httpx").setLevel(level)
-                logging.getLogger("httpcore").setLevel(level)
-                self.langchain_logger.setLevel(level)
-                self.console.print(Panel(f"✅ All categories set to {level_name}", border_style="green"))
+            # Use LogManager to set level (handles smart root adjustment)
+            success, message = self.log_manager.set_level(category, level)
+
+            if success:
+                self.console.print(Panel(f"✅ {message}", border_style="green"))
             else:
-                self.console.print(Panel(f"❌ Unknown category: {category}\nUse: prompt, http, langchain, or all", 
-                                       title="Error", border_style="red"))
+                self.console.print(Panel(f"❌ {message}", title="Error", border_style="red"))
 
         else:
             available_commands = "/history, /clear, /fullhistorylog, /debug, /loglevel"
@@ -380,7 +360,7 @@ class REPLCLI:
                 sys.exit(0)
 
 
-def run_repl(config_loader, prompt_builder, api_key):
+def run_repl(config_loader, prompt_builder, api_key, log_manager):
     """
     Run the CLI REPL interface.
 
@@ -388,6 +368,7 @@ def run_repl(config_loader, prompt_builder, api_key):
         config_loader: ConfigLoader instance (for hot-reload)
         prompt_builder: PromptBuilder instance (for hot-reload)
         api_key: OpenRouter API key
+        log_manager: LogManager instance (from core)
     """
-    cli = REPLCLI(config_loader, prompt_builder, api_key)
+    cli = REPLCLI(config_loader, prompt_builder, api_key, log_manager)
     cli.run()

@@ -27,8 +27,23 @@ if not api_key:
 # Initialize core components (shared across all adapters)
 from core.config_loader import ConfigLoader
 from core.prompt_builder import PromptBuilder
+from core.logger import init_logger, LogManager
+import logging
 
 base_dir = Path(__file__).parent
+
+# Initialize root logger at DEBUG to allow component-level control
+log_file = base_dir / "logs" / "cli.log"
+init_logger(
+    log_level=logging.DEBUG,
+    log_file=str(log_file),
+    shell_output=True,
+    print_log_init=False,
+)
+
+# Initialize LogManager for component-level log control
+log_manager = LogManager()
+
 config_loader = ConfigLoader(base_dir / "config" / "config.yaml")
 prompt_builder = PromptBuilder(base_dir / "templates" / "prompt.jinja")
 
@@ -38,7 +53,7 @@ adapter = sys.argv[1] if len(sys.argv) > 1 else "cli"
 # Route to appropriate adapter
 if adapter == "cli":
     from adapters.cli_ptk import run_repl
-    run_repl(config_loader, prompt_builder, api_key)
+    run_repl(config_loader, prompt_builder, api_key, log_manager)
 else:
     print(f"Error: Unknown adapter '{adapter}'")
     print("Available adapters: cli")
